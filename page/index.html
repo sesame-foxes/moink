@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="moink-page-version" content="R1.4.0">
+<meta name="moink-page-version" content="R1.4.1">
 <meta name="theme-color" content="#faf7f2">
 <title>墨印 · MoInk</title>
 <style>
@@ -1101,7 +1101,7 @@ style="flex:1 1 auto; min-height:62px; resize:vertical"></textarea>
 <div class="btns" style="margin-top:2px">
 <button class="mini" id="stkUp">选择图片</button>
 </div>
-<input type="file" id="stkFile" accept="image/*" style="display:none">
+<input type="file" id="stkFile" accept="image/*,.heic,.heif,.heics,.hif,image/heic,image/heif,image/heic-sequence,image/heif-sequence" style="display:none">
 <div class="hint" style="margin:6px 0 0">只在本页使用：不上传、不保存。</div>
 </div>
 </div>
@@ -1501,7 +1501,7 @@ placeholder="一行一块，回车换行" style="flex:1 1 auto; min-height:92px"
 </footer>
 </div>
 </div>
-<input type="file" id="file" accept="image/*" aria-label="选择图片">
+<input type="file" id="file" accept="image/*,.heic,.heif,.heics,.hif,image/heic,image/heif,image/heic-sequence,image/heif-sequence" aria-label="选择图片">
 
 <script>
 "use strict";
@@ -2884,6 +2884,63 @@ off += 2 + d.getUint16(off + 2);
 }
 return null;
 }
+var HEIC_MIME_RE = /^image\/(heic|heif|heic-sequence|heif-sequence)$/i;
+var HEIC_EXT_RE  = /\.(heic|heif|heics|hif)$/i;
+var HEIC_BRANDS  = ["heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs", "mif1", "msf1"];
+var heicLoadPromise = null;
+function looksLikeHeic(f){
+var t = f.type || "", n = f.name || "";
+return HEIC_MIME_RE.test(t) || HEIC_EXT_RE.test(n) || /heic|heif/i.test(t);
+}
+function isHeicFile(f, cb){
+if (!looksLikeHeic(f)){ cb(false); return; }
+var fr = new FileReader();
+fr.onload = function(){
+var d = new Uint8Array(fr.result || ""), s = "", i;
+for (i = 0; i < Math.min(d.length, 64); i++) s += String.fromCharCode(d[i]);
+var brand = s.slice(4, 8) === "ftyp" && HEIC_BRANDS.some(function(b){ return s.indexOf(b) >= 0; });
+cb(brand && s.indexOf("avif") < 0 && s.indexOf("avis") < 0);
+};
+fr.onerror = function(){ cb(looksLikeHeic(f)); };
+fr.readAsArrayBuffer(f.slice(0, 64));
+}
+function loadScript(src){
+return new Promise(function(resolve, reject){
+var s = document.createElement("script");
+s.onload = resolve;
+s.onerror = function(){ reject(new Error("解码器加载失败")); };
+s.src = src;
+document.head.appendChild(s);
+});
+}
+function ensureHeicDecoder(){
+if (window.heic2any) return Promise.resolve();
+if (heicLoadPromise) return heicLoadPromise;
+msg("正在加载 HEIC 解码器…", "");
+heicLoadPromise = loadScript(api("/heic2any.js")).then(function(){
+if (!window.heic2any) throw new Error("解码器未就绪");
+});
+heicLoadPromise.catch(function(){ heicLoadPromise = null; });
+return heicLoadPromise;
+}
+function convertHeic(f){
+msg("正在转换 HEIC 为 JPEG…", "");
+showWorkLoading("正在准备 HEIC 解码器…");
+ensureHeicDecoder().then(function(){
+updateWorkLoading("正在转换 HEIC…");
+return window.heic2any({ blob:f, toType:"image/jpeg", quality:0.92 });
+}).then(function(out){
+var b = Array.isArray(out) ? out[0] : out;
+if (!b || !b.size) throw new Error("转换结果为空");
+var name = String(f.name || "photo.heic").replace(HEIC_EXT_RE, "") + ".jpg";
+var jf = new File([b], name, { type:"image/jpeg", lastModified:f.lastModified || Date.now() });
+hideWorkLoading();
+loadFile(jf);
+}).catch(function(e){
+hideWorkLoading();
+msg("HEIC 解码失败：" + (e && e.message ? e.message : "未知错误") + "。可把照片导出为 JPEG 再试。", "err");
+});
+}
 function adoptImg(im2, url, f){
 if (imgUrl && imgUrl !== url) URL.revokeObjectURL(imgUrl);
 imgUrl = url;
@@ -2906,10 +2963,14 @@ schedulePreview(false);
 }
 function loadFile(f){
 if (!f) return;
-if (!/^image\//.test(f.type)){ msg("请选择图片文件", "err"); return; }
+var heic = looksLikeHeic(f);
+var knownImage = /\.(jpe?g|png|gif|webp|bmp|svg|avif)$/i.test(f.name || "");
+if (!/^image\//.test(f.type || "") && !heic && !knownImage){ msg("请选择图片文件", "err"); return; }
 var url = URL.createObjectURL(f);
 var im = new Image();
+var settled = false;
 im.onload = function(){
+settled = true;
 if (!/^image\/jpeg$/.test(f.type)){
 pendingShotDate = f.lastModified ? new Date(f.lastModified) : null;
 adoptImg(im, url, f); return;
@@ -2936,7 +2997,16 @@ im2.src = u2;
 fr.onerror = function(){ adoptImg(im, url, f); };
 fr.readAsArrayBuffer(f);
 };
-im.onerror = function(){ msg("图片解码失败，换一张试试", "err"); };
+im.onerror = function(){
+if (settled) return;
+settled = true;
+URL.revokeObjectURL(url);
+if (!heic){ msg("图片解码失败，换一张试试", "err"); return; }
+isHeicFile(f, function(yes){
+if (yes) convertHeic(f);
+else msg("图片解码失败，换一张试试", "err");
+});
+};
 im.src = url;
 }
 var pickerLeftPage = false, pickerTimer = 0;

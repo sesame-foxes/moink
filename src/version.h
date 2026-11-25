@@ -295,8 +295,16 @@
  *     index.html 零注释，只用于本固件内嵌（src/index_html.h）与 OTA 页面热更。
  *   - 发布版本号只有 MOINK_VERSION 这一处；帧契约 api 仍为 2，分区表零变动。
  * ────────────────────────────────────────────────────────────────
+ *
+ * R1.4.1 变更（2026-11-26，控制页 HEIC 兼容）：
+ *   - 新增 GET /heic2any.js：heic2any@0.0.4 的 gzip 产物固化进 app 分区，
+ *     4 KB 分块流式发出，只在浏览器原生解不了 HEIC 时按需请求；
+ *   - 选图链路按 MIME / 扩展名 / ftyp 文件头识别 HEIC，原生失败转 JPEG 后
+ *     复用原 EXIF / 裁剪 / 四色管线；照片始终只在手机本地处理，不上传；
+ *   - 分区表、NVS、帧协议（api=2）、轮播 8 槽均零变动。
+ * ────────────────────────────────────────────────────────────────
  */
 #define MOINK_API_VERSION   2
-#define MOINK_VERSION       "R1.4.0"
+#define MOINK_VERSION       "R1.4.1"
 
 #endif /* MOINK_VERSION_H */

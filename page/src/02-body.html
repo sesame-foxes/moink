@@ -450,7 +450,7 @@
             <div class="btns" style="margin-top:2px">
               <button class="mini" id="stkUp">选择图片</button>
             </div>
-            <input type="file" id="stkFile" accept="image/*" style="display:none">
+            <input type="file" id="stkFile" accept="image/*,.heic,.heif,.heics,.hif,image/heic,image/heif,image/heic-sequence,image/heif-sequence" style="display:none">
             <div class="hint" style="margin:6px 0 0">只在本页使用：不上传、不保存。</div>
           </div>
         </div>
@@ -889,4 +889,4 @@
 </div>
 
 <!-- 文件选择：不放进 stage（否则会盖住文字手柄），由 JS 触发 -->
-<input type="file" id="file" accept="image/*" aria-label="选择图片">
+<input type="file" id="file" accept="image/*,.heic,.heif,.heics,.hif,image/heic,image/heif,image/heic-sequence,image/heif-sequence" aria-label="选择图片">

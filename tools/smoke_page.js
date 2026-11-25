@@ -1070,9 +1070,9 @@ ok("R1.4.0 firmware: explicit 409/507 status lines (IDF 6.1)",
 ok("R1.4.0 build: comment-free prod page + commented dev page, single version",
    prod.indexOf("<!--") < 0 && !/\/\*[\s\S]*?\*\//.test(prod) /* MIME 通配符不算注释 */
    && page.indexOf("/* ====") >= 0
-   && /moink-page-version" content="R1\.4\.0(-\d+)?"/.test(prod)
-   && /moink-page-version" content="R1\.4\.0(-\d+)?"/.test(page)
-   && /#define MOINK_VERSION\s+"R1\.4\.0(-\d+)?"/.test(versionH));
+   && new RegExp('moink-page-version" content="' + VER_BASE + '(-\\d+)?"').test(prod)
+   && new RegExp('moink-page-version" content="' + VER_BASE + '(-\\d+)?"').test(page)
+   && new RegExp('#define MOINK_VERSION\\s+"' + VER_BASE + '(-\\d+)?"').test(versionH));
 
 // 2026-11-16 根因：TIME_WAIT 120 s + 13 条并发连接把 ~39 KB 堆榨干 → 网页打不开。
 // 这几项是当时的修复，改回去会立刻复发。
@@ -1119,6 +1119,18 @@ ok("2026-11-17 贴纸色彩与照片一致（不再明显发灰）",
    js.indexOf("c.autoLevels = 1") >= 0
    && js.indexOf("c.coolDesat = 0") >= 0
    && js.indexOf("c.coolPull = 0") >= 0);
+
+// R1.4.1：HEIC 本地解码器（识别 / 固件路由 / 内置资源）
+ok("R1.4.1 HEIC: 本地解码器 + 文件头识别 + 转换回退",
+   page.indexOf('id="file" accept="image/*,.heic,.heif,.heics,.hif') >= 0
+   && js.indexOf("function looksLikeHeic(f)") >= 0
+   && js.indexOf("function isHeicFile(f, cb)") >= 0
+   && js.indexOf("function convertHeic(f)") >= 0
+   && js.indexOf('api("/heic2any.js")') >= 0
+   && mainC.indexOf('{ .uri = "/heic2any.js"') >= 0
+   && mainC.indexOf('#include "heic_js.h"') >= 0
+   && fs.existsSync(path.join(__dirname, "..", "src", "heic_js.h"))
+   && fs.existsSync(path.join(__dirname, "..", "page", "vendor", "heic2any.min.js")));
 
 console.log(failed === 0 ? "SMOKE: ALL PASS" : ("SMOKE: " + failed + " FAILED"));
 process.exit(failed === 0 ? 0 : 1);

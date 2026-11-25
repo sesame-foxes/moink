@@ -1,8 +1,9 @@
 # 墨印 · MoInk — 版本更新记录（CHANGELOG）
 
-> **★ 当前版本 = R1.4.0**（2026-11-17 正式发布；`version.h` / 页面 meta / 固件 / 文件名四处一致，
-> `MOINK_API_VERSION` 仍为 2）。开发过程的 `R1.4.0-1`～`-6` 本地批次号已随本次发布取消，
-> 内容统一并入下方 R1.4.0 条目。
+> **★ 当前版本 = R1.4.1**（2026-11-26；`version.h` / 页面 meta 一致，
+> `MOINK_API_VERSION` 仍为 2）。R1.4.1 为控制页 HEIC 兼容 + 固件内置解码器，分区表与帧协议零改动。
+> 上一正式发布 = R1.4.0（2026-11-17；开发过程的 `R1.4.0-1`～`-6` 本地批次号已取消，
+> 内容统一并入下方 R1.4.0 条目）。
 
 > **★ 最新已发布 Release = R1.4.0**（tag `R1.4.0`，2026-11-17 发布）。
 > 上一个 = R1.3.7（刷机后按一下开机 / 重启不掉电 / USB 轮询只留 FPC 老排线）。
@@ -43,6 +44,33 @@
 ```
 
 （R1.2.0 起只有单一版本号；此前的历史条目保留 `fw + page` 双号写法，不再改写）
+
+---
+
+## [R1.4.1] 2026-11-26 —— HEIC / HEIF 兼容（固件内置解码器）
+
+### 新增
+- **HEIC / HEIF 选图**：`accept` 增加 `.heic/.heif/.heics/.hif` 与对应 MIME；选图按 `MIME → 扩展名 → ftyp 文件头` 识别，安卓文件选择器能直接列出 HEIC。
+- **本地解码器路由**：`GET /heic2any.js` 返回固件内置的 `heic2any@0.0.4`（gzip 337,727 B），4 KB 分块流式输出，带 immutable 缓存头。浏览器只在原生解不了 HEIC 时请求一次；照片不上传。
+- 原生解码失败时把 HEIC 转成 JPEG Blob，再走原有 EXIF 摆正 / 裁剪 / 四色合成管线。Safari 等原生支持的浏览器零额外开销。
+
+### 修改
+- `page/src/31-pick.js`：新增 HEIC 识别、本地解码器懒加载与转换回退；`loadFile()` 放行 MIME 为空的常见图片。
+- `page/src/02-body.html`：两个图片输入框的 `accept` 扩展。
+- `src/main.c` / `src/CMakeLists.txt` / `tools/make_heic_header.py` / `page/vendor/`：解码器固化与路由。
+- 版本号 `MOINK_VERSION` 与页面 meta 同步为 R1.4.1，内嵌页面副本重新生成。
+
+### 涉及文件
+- `src/version.h`、`src/main.c`、`src/CMakeLists.txt`、`src/index_html.h`、`src/heic_js.h`
+- `page/src/02-body.html`、`page/src/31-pick.js`、`page/index.html`、`page/index.dev.html`
+- `page/vendor/heic2any.min.js`、`page/vendor/HEIC2ANY-LICENSE.md`、`tools/make_heic_header.py`
+- `docs/CONTRACT.md`、`docs/CHANGELOG.md`、`README.md`、`docs/入门教程.md`、`tools/smoke_page.js`
+
+### 影响范围与注意事项
+- 分区表、NVS、帧协议（api=2）、轮播 8 槽零变动；不需要重新分区，正常 OTA 即可。
+- app 分区从 928,128 B 增至约 1,265,855 B，仍小于 1,441,792 B 的 OTA 槽，余量约 172 KiB。
+- 主页面 gzip 仍约 70 KB，解码器独立路由加载，不会重演大响应吃光堆的问题。
+- 解码器在手机内存中展开约 1.3 MB；ESP32 RAM 不增加。heic2any 为 MIT 许可，许可证随源码保留。
 
 ---
 

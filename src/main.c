@@ -15,6 +15,7 @@
  *
  * 路由：
  *   GET  /                控制页（内嵌 gzip，R1.4.0 起唯一来源）
+ *   GET  /heic2any.js     浏览器端 HEIC 解码器（内嵌 gzip，按需请求，R1.4.1）
  *   GET  /api/info        状态（版本 / 接口 / 面板 / 堆 / 电量 / 客户端数 / 联网）
  *   GET/POST /api/settings 读写设置
  *   GET/POST /api/net     上游 WiFi 列表与热点转发状态（R1.3.5）
@@ -57,6 +58,7 @@
 #include "net_fetch.h"
 
 #include "index_html.h"     /* 由 tools/make_index_header.py 固化，改页必重跑 */
+#include "heic_js.h"        /* 由 tools/make_heic_header.py 固化，HEIC 解码器 */
 #include "diag.h"           /* 临时诊断（MOINK_DIAG），定位完置 0 */
 
 static const char *TAG = "main";
@@ -251,6 +253,29 @@ static esp_err_t page_handler(httpd_req_t *req)
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
     DIAG_E(TAG, "page gz %u B (raw %u)", index_html_gz_len, index_html_raw_len);
     return httpd_resp_send(req, (const char *)index_html_gz, index_html_gz_len);
+}
+
+/* R1.4.1：HEIC 解码器只在浏览器原生解不了 HEIC 时才请求。
+   4 KB 分块从 flash 流式输出，不整包 malloc；主页面 gzip 体积不受影响。 */
+static esp_err_t heic_js_handler(httpd_req_t *req)
+{
+    diag_req("GET /heic2any.js");
+    power_activity();
+
+    httpd_resp_set_type(req, "application/javascript; charset=utf-8");
+    httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+    httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=31536000, immutable");
+    DIAG_E(TAG, "heic js gz %u B (raw %u)", heic_js_gz_len, heic_js_raw_len);
+
+    const unsigned char *p = heic_js_gz;
+    size_t left = heic_js_gz_len;
+    while (left){
+        size_t n = (left > 4096) ? 4096 : left;
+        if (httpd_resp_send_chunk(req, (const char *)p, n) != ESP_OK) return ESP_FAIL;
+        p += n;
+        left -= n;
+    }
+    return httpd_resp_send_chunk(req, NULL, 0);
 }
 
 
@@ -1053,6 +1078,7 @@ static httpd_handle_t start_server(void)
 
     httpd_uri_t routes[] = {
         { .uri = "/",               .method = HTTP_GET,    .handler = page_handler,         .user_ctx = NULL },
+        { .uri = "/heic2any.js",    .method = HTTP_GET,    .handler = heic_js_handler,      .user_ctx = NULL },
         { .uri = "/api/info",       .method = HTTP_GET,    .handler = info_handler,         .user_ctx = NULL },
         { .uri = "/api/settings",   .method = HTTP_GET,    .handler = settings_get_handler, .user_ctx = NULL },
         { .uri = "/api/settings",   .method = HTTP_POST,   .handler = settings_post_handler,.user_ctx = NULL },

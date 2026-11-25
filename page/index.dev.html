@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="moink-page-version" content="R1.4.0">
+<meta name="moink-page-version" content="R1.4.1">
 <meta name="theme-color" content="#faf7f2">
 <title>墨印 · MoInk</title>
 <style>
@@ -1408,7 +1408,7 @@ button.act[disabled]{ opacity:.45; }
             <div class="btns" style="margin-top:2px">
               <button class="mini" id="stkUp">选择图片</button>
             </div>
-            <input type="file" id="stkFile" accept="image/*" style="display:none">
+            <input type="file" id="stkFile" accept="image/*,.heic,.heif,.heics,.hif,image/heic,image/heif,image/heic-sequence,image/heif-sequence" style="display:none">
             <div class="hint" style="margin:6px 0 0">只在本页使用：不上传、不保存。</div>
           </div>
         </div>
@@ -1847,7 +1847,7 @@ button.act[disabled]{ opacity:.45; }
 </div>
 
 <!-- 文件选择：不放进 stage（否则会盖住文字手柄），由 JS 触发 -->
-<input type="file" id="file" accept="image/*" aria-label="选择图片">
+<input type="file" id="file" accept="image/*,.heic,.heif,.heics,.hif,image/heic,image/heif,image/heic-sequence,image/heif-sequence" aria-label="选择图片">
 
 <script>
 "use strict";
@@ -3508,6 +3508,72 @@ function exifDateTime(buf){
   }
   return null;
 }
+/* ---------- HEIC / HEIF 兼容（R1.4.1） ----------
+   Safari 能原生解 HEIC，安卓浏览器多数不能；设备端只收 2bpp 帧，
+   所以转换放在浏览器：原生失败时加载固件内置的 heic2any 转 JPEG。 */
+var HEIC_MIME_RE = /^image\/(heic|heif|heic-sequence|heif-sequence)$/i;
+var HEIC_EXT_RE  = /\.(heic|heif|heics|hif)$/i;
+var HEIC_BRANDS  = ["heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs", "mif1", "msf1"];
+var heicLoadPromise = null;
+
+function looksLikeHeic(f){
+  var t = f.type || "", n = f.name || "";
+  return HEIC_MIME_RE.test(t) || HEIC_EXT_RE.test(n) || /heic|heif/i.test(t);
+}
+/* MIME 与扩展名都不可靠时读文件头：ISO-BMFF 的 bytes 4..7 = "ftyp"，
+   compatible brands 出现 HEVC/HEIF 标记才认。AVIF 也用 mif1，排除掉。 */
+function isHeicFile(f, cb){
+  if (!looksLikeHeic(f)){ cb(false); return; }
+  var fr = new FileReader();
+  fr.onload = function(){
+    var d = new Uint8Array(fr.result || ""), s = "", i;
+    for (i = 0; i < Math.min(d.length, 64); i++) s += String.fromCharCode(d[i]);
+    var brand = s.slice(4, 8) === "ftyp" && HEIC_BRANDS.some(function(b){ return s.indexOf(b) >= 0; });
+    cb(brand && s.indexOf("avif") < 0 && s.indexOf("avis") < 0);
+  };
+  fr.onerror = function(){ cb(looksLikeHeic(f)); };
+  fr.readAsArrayBuffer(f.slice(0, 64));
+}
+function loadScript(src){
+  return new Promise(function(resolve, reject){
+    var s = document.createElement("script");
+    s.onload = resolve;
+    s.onerror = function(){ reject(new Error("解码器加载失败")); };
+    s.src = src;
+    document.head.appendChild(s);
+  });
+}
+/* 解码器随固件内置：只有原生解不了 HEIC 时才请求 /heic2any.js。
+   gzip 由固件声明 Content-Encoding，浏览器自行解压；照片本身不上传。 */
+function ensureHeicDecoder(){
+  if (window.heic2any) return Promise.resolve();
+  if (heicLoadPromise) return heicLoadPromise;
+  msg("正在加载 HEIC 解码器…", "");
+  heicLoadPromise = loadScript(api("/heic2any.js")).then(function(){
+    if (!window.heic2any) throw new Error("解码器未就绪");
+  });
+  heicLoadPromise.catch(function(){ heicLoadPromise = null; });
+  return heicLoadPromise;
+}
+/* 原生解码失败后的兜底：HEIC -> JPEG Blob，再走原来的 JPEG 管线（含 EXIF 读取）。 */
+function convertHeic(f){
+  msg("正在转换 HEIC 为 JPEG…", "");
+  showWorkLoading("正在准备 HEIC 解码器…");
+  ensureHeicDecoder().then(function(){
+    updateWorkLoading("正在转换 HEIC…");
+    return window.heic2any({ blob:f, toType:"image/jpeg", quality:0.92 });
+  }).then(function(out){
+    var b = Array.isArray(out) ? out[0] : out;
+    if (!b || !b.size) throw new Error("转换结果为空");
+    var name = String(f.name || "photo.heic").replace(HEIC_EXT_RE, "") + ".jpg";
+    var jf = new File([b], name, { type:"image/jpeg", lastModified:f.lastModified || Date.now() });
+    hideWorkLoading();
+    loadFile(jf);
+  }).catch(function(e){
+    hideWorkLoading();
+    msg("HEIC 解码失败：" + (e && e.message ? e.message : "未知错误") + "。可把照片导出为 JPEG 再试。", "err");
+  });
+}
 /* 采纳图片：收编对象/URL、重置裁剪旋转（不跨图记忆）、走既有初始化链 */
 function adoptImg(im2, url, f){
   if (imgUrl && imgUrl !== url) URL.revokeObjectURL(imgUrl);
@@ -3531,10 +3597,16 @@ function adoptImg(im2, url, f){
 }
 function loadFile(f){
   if (!f) return;
-  if (!/^image\//.test(f.type)){ msg("请选择图片文件", "err"); return; }
+  var heic = looksLikeHeic(f);
+  /* 有些系统把 HEIC 的 MIME 留空或标成 application/octet-stream，
+     扩展名与常见图片后缀也放行，解码失败再按 HEIC 兜底。 */
+  var knownImage = /\.(jpe?g|png|gif|webp|bmp|svg|avif)$/i.test(f.name || "");
+  if (!/^image\//.test(f.type || "") && !heic && !knownImage){ msg("请选择图片文件", "err"); return; }
   var url = URL.createObjectURL(f);
   var im = new Image();
+  var settled = false;
   im.onload = function(){
+    settled = true;
     /* EXIF 归一：仅 JPEG 且方向标记 2~8 时，经 canvas 重绘烤正（drawImage 在
        from-image 内核上已按 EXIF 摆正），不再依赖 Cropper 的 XHR EXIF 方案；
        其余图片零额外成本。 */
@@ -3565,7 +3637,17 @@ function loadFile(f){
     fr.onerror = function(){ adoptImg(im, url, f); };
     fr.readAsArrayBuffer(f);
   };
-  im.onerror = function(){ msg("图片解码失败，换一张试试", "err"); };
+  im.onerror = function(){
+    if (settled) return;
+    settled = true;
+    URL.revokeObjectURL(url);
+    if (!heic){ msg("图片解码失败，换一张试试", "err"); return; }
+    /* 只对像 HEIC 的文件读文件头再确认，避免把普通坏图送进 WASM 解码器 */
+    isHeicFile(f, function(yes){
+      if (yes) convertHeic(f);
+      else msg("图片解码失败，换一张试试", "err");
+    });
+  };
   im.src = url;
 }
 /* 部分品牌安卓手机Android captive WebView 没实现 onShowFileChooser 时，input 仍会收到 click，但页面

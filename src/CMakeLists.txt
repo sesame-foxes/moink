@@ -15,7 +15,8 @@ idf_component_register(
 # PIO 的 ESP-IDF 集成不记录对生成头/版本头的隐式依赖（改了链接仍用旧内容），
 # 故显式声明：改页必触发 main.c 重编；改版本号必触发全部源文件重编。
 set_property(SOURCE main.c APPEND PROPERTY OBJECT_DEPENDS
-             "${CMAKE_CURRENT_SOURCE_DIR}/index_html.h")
+             "${CMAKE_CURRENT_SOURCE_DIR}/index_html.h"
+             "${CMAKE_CURRENT_SOURCE_DIR}/heic_js.h")
 set_property(SOURCE ${MOINK_SRCS} APPEND PROPERTY OBJECT_DEPENDS
              "${CMAKE_CURRENT_SOURCE_DIR}/version.h")
 

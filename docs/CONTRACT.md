@@ -2,7 +2,7 @@
 
 > 本文档是**固件与页面之间的唯一权威接口定义**，以及**屏驱动的物理契约**。
 > 改动任何一条必须同步更新 `check_frame.py` / `smoke_page.js` 并全量回归。
-> 版本：version = R1.4.0（固件与控制页共用这一个号），api = 2。
+> 版本：version = R1.4.1（固件与控制页共用这一个号），api = 2。
 
 > **控制页两份产物（R1.4.0 定版）**，由 `page/build.py` 一次生成，页面内容一致、
 > 只差注释与空白，**meta 版本号都取 `src/version.h` 的 `MOINK_VERSION`**：
@@ -332,6 +332,7 @@ GPIO 唤醒阈值固定 ≈1.8 V 不可配）。
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/` | 控制页（web 分区优先，否则内嵌页） |
+| GET | `/heic2any.js` | HEIC 解码器（R1.4.1）：固件内嵌 JS，`Content-Encoding: gzip`、`Content-Type: application/javascript`、`Cache-Control: immutable`；4 KB 分块流式输出。浏览器仅在原生解不了 HEIC 时按需请求 |
 | GET | `/api/info` | 状态 JSON：**ver**/fw/api/panel/**gpio_preset**/heap/bat_mv/sleep_s/wake_s/clients/ssid/uptime/**store_slots**/**store_count**/**store_cur**/**wake_reason**/**wake_bits**/**net_on**/**napt**/**sta_connected**/**sta_ssid**/**sta_ip**/**sta_rssi**/**usb**（`ver` = 当前生效版本，`wake_reason` 见 §5.2；`bat_mv` 语义见 §6.2.2；`net_*` / `sta_*` 见 §6.3；`usb` = 是否判定为 USB 供电，见 §5.4） |
 | GET | `/api/settings` | 读设置 JSON：panel/hflip/wifi_pwr/**gpio_preset**/**pins[8]**/sleep_s/**timeout_action**/**line_v**/wake_s/**wake_show**/ssid/pass_set/**pll**/**r_mode**/**r_url**/**r_user**/**r_pass_set**/**r_slot**/**r_count**（`line_v` 见 §5.4；`pll`、`r_*` 见 §6.4） |
 | POST | `/api/settings` | 写设置（`panel`/`hflip`/`gpio_preset`（自定义档另带 `p_adc`/`p_wake`/`p_sck`/`p_mosi`/`p_cs`/`p_dc`/`p_rst`/`p_busy`）/`sleep_s`/**`timeout_action`**/**`line_v`**/`wake_s`/**`wake_show`**/**`pll`**/**`r_mode`**/**`r_url`**/**`r_user`**/**`r_pass`**；热点与远程密码均为「缺省 = 保持，空串 = 清除」，见 §7） |
