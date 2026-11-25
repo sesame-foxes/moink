@@ -1,7 +1,7 @@
 # 墨印 · MoInk
 
 ## 说明
-该集成frok自https://github.com/atunverse/moink，由于我是安卓机，手机浏览器上传的HEIC格式照片无法解码，每次需要手动转jpg，遂在ai的帮助下增加了HEIC无法解码的情况下加载heic2any，转成jpg。安卓情况下测试通过。
+该集成frok自 https://github.com/atunverse/moink ，由于我是安卓机，手机浏览器上传的HEIC格式照片无法解码，每次需要手动转jpg，遂在ai的帮助下增加了HEIC无法解码的情况下加载heic2any，转成jpg。安卓情况下测试通过。
 
 > **把喜欢的瞬间，放在身边。**
 > 基于 ESP32-C3 与华为拆机四色电子墨水屏（768×552，黑 / 白 / 黄 / 红）的电子拍立得、桌面相框与随身挂件。
